@@ -33,7 +33,10 @@ async fn main() {
     println!("Listening on {}", addr);
     axum::serve(listener, app).await.unwrap();
 }
-
+async fn validateKey(api_key: &str) -> bool{
+    let valid_api_key = env::var("API_KEY").unwrap_or_else(|_| "none".to_string());
+    api_key == valid_api_key
+}
 // Monitor log file for new lines and store them
 async fn monitor_log_file(log_data: Arc<Mutex<Vec<String>>>) {
     let mut file = File::open(LOG_FILE_PATH).expect("Failed to open log file");

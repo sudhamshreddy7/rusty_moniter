@@ -7,3 +7,8 @@ edition = "2021"
 axum = "0.8.1"
 serde_json = "1.0.138"
 tokio = { version = "1.43.0", features = ["full", "rt-multi-thread"] }
+chrono = "0.4"
+sys-info = "0.9.1"
+memchr = "2.7"  # Use the latest compatible version
+sysinfo = "^0.33.1"
+psutil = "3.2"

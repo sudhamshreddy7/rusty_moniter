@@ -4,42 +4,63 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Seek, SeekFrom, Read},
     sync::{Arc, Mutex},
-    net::SocketAddr,
+    // net::SocketAddr,
     env,
 };
-use psutil::process::Process; 
+use axum::response::IntoResponse;
+use axum_extra::headers::Authorization;
+use axum_extra::extract::TypedHeader;
 use chrono::Local;
 use tokio::net::TcpListener;
-
-const LOG_FILE_PATH: &str = "/home/ubuntu/logging.log";
-
+use axum::http::StatusCode;
+use axum_extra::headers::authorization::Bearer;
+// const LOG_FILE_PATH: &str = "/home/ubuntu/logging.log";
+use std::io::{self, Write};
 #[tokio::main]
 async fn main() {
     let log_data = Arc::new(Mutex::new(Vec::new()));
-
+    let log_path = get_log_path();
     // Spawn a background task to monitor log file changes
     let log_data_clone = log_data.clone();
     tokio::spawn(async move {
-        monitor_log_file(log_data_clone).await;
+        monitor_log_file(log_data_clone,log_path).await;
     });
-
+    let addr:std::net::SocketAddr = "0.0.0.0:8777".parse().unwrap();
     // Setup API server
-    let app = Router::new()
-        .route("/logs", get(move |TypedHeader(auth): TypedHeader<Authorization<String>>| fetch_logs(log_data.clone(), auth)))
-        .route("/details", get(move |TypedHeader(auth): TypedHeader<Authorization<String>>| fetch_details(auth)))
-        .route("/ping", get(|| async { "pong" }));
+    let app = Router::new().route("/logs", get(move |TypedHeader(auth): TypedHeader<Authorization<Bearer>>| async move {
+            fetch_logs(log_data.clone(), auth.0.token().to_string()).await
+        }
+    ))
+                            .route("/details", get(move |TypedHeader(auth): TypedHeader<Authorization<Bearer>>| async move {
+            fetch_details(auth.0.token().to_string()).await
+        }
+    ))
+                            .route("/ping", get(|| async { "pong" }));
     let listener = TcpListener::bind(addr).await.unwrap();
 
     println!("Listening on {}", addr);
+    println!("The application is running the backgroud you close the terminal.\nTo stop the application use kill <pid>");
     axum::serve(listener, app).await.unwrap();
 }
 async fn validate_api_key(api_key: &str) -> bool{
     let valid_api_key = env::var("API_KEY").unwrap_or_else(|_| "none".to_string());
+    // println!("{}\n{}",api_key,valid_api_key);
     api_key == valid_api_key
 }
+fn get_log_path() -> String {
+    print!("Enter log file path: ");
+    io::stdout().flush().unwrap();
+    
+    let mut path = String::new();
+    io::stdin().read_line(&mut path)
+        .expect("Failed to read input");
+        
+    path.trim().to_string()
+}
 // Monitor log file for new lines and store them
-async fn monitor_log_file(log_data: Arc<Mutex<Vec<String>>>) {
-    let mut file = File::open(LOG_FILE_PATH).expect("Failed to open log file");
+async fn monitor_log_file(log_data: Arc<Mutex<Vec<String>>>,log_path: String) {
+    println!("{}",log_path);
+    let mut file = File::open(log_path).expect("Failed to open log file");
     
     let mut last_position = file.metadata().unwrap().len();
     
@@ -68,9 +89,9 @@ async fn monitor_log_file(log_data: Arc<Mutex<Vec<String>>>) {
 }
 
 // Fetch logs when API is hit
-async fn fetch_logs(log_data: Arc<Mutex<Vec<String>>>,api_key: String) -> Json<serde_json::Value> {
-    if !validate_api_key(&api_key) {
-        return Json(json!({"error": "Unauthorized"})).with_status(StatusCode::UNAUTHORIZED);
+async fn fetch_logs(log_data: Arc<Mutex<Vec<String>>>,api_key: String) -> impl IntoResponse{
+    if !validate_api_key(&api_key).await {
+        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"})));
     }
     let mut logs = log_data.lock().unwrap();
     let current_time = Local::now().to_string();
@@ -79,11 +100,11 @@ async fn fetch_logs(log_data: Arc<Mutex<Vec<String>>>,api_key: String) -> Json<s
     // Clear buffer after sending
     logs.clear();
 
-    Json(response)
+    (StatusCode::OK, Json(response))
 }
-async fn fetch_details(api_key: String) -> Json<serde_json::Value>{
-    if !validate_api_key(&api_key) {
-        return Json(json!({"error": "Unauthorized"})).with_status(StatusCode::UNAUTHORIZED);
+async fn fetch_details(api_key: String) -> impl IntoResponse{
+    if !validate_api_key(&api_key).await {
+        return (StatusCode::UNAUTHORIZED, Json(json!({"error": "Unauthorized"})));
     }
     let current_time = Local::now().to_string();
     let total_memory = sys_info::mem_info().unwrap();
@@ -102,7 +123,7 @@ async fn fetch_details(api_key: String) -> Json<serde_json::Value>{
                             "Disk used": disk_used,
                             // "Process": process,
                         });
-    Json(response)
+    (StatusCode::OK, Json(response))
 }
 // async fn fetch_processes() -> Json<serde_json::Value>{
 //     let mem = sys_info::mem_info().unwrap();

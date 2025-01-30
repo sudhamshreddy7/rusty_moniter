@@ -14,4 +14,7 @@ clear
 export API_KEY=$(openssl rand -hex 16)
 echo "Your API key:"
 printenv API_KEY
-cargo run &
+echo "Enter log file path:"
+read LOG_FILE_PATH
+export LOG_FILE_PATH
+nohup cargo run > /dev/null 2>&1 &

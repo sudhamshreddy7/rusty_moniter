@@ -19,7 +19,7 @@ use std::io::{self, Write};
 #[tokio::main]
 async fn main() {
     let log_data = Arc::new(Mutex::new(Vec::new()));
-    let log_path = get_log_path();
+    let log_path = env::var("LOG_FILE_PATH").expect("LOG_FILE_PATH not set");
     // Spawn a background task to monitor log file changes
     let log_data_clone = log_data.clone();
     tokio::spawn(async move {
@@ -28,14 +28,14 @@ async fn main() {
     let addr:std::net::SocketAddr = "0.0.0.0:8777".parse().unwrap();
     // Setup API server
     let app = Router::new().route("/logs", get(move |TypedHeader(auth): TypedHeader<Authorization<Bearer>>| async move {
-            fetch_logs(log_data.clone(), auth.0.token().to_string()).await
-        }
+        fetch_logs(log_data.clone(), auth.0.token().to_string()).await
+    }
     ))
-                            .route("/details", get(move |TypedHeader(auth): TypedHeader<Authorization<Bearer>>| async move {
+        .route("/details", get(move |TypedHeader(auth): TypedHeader<Authorization<Bearer>>| async move {
             fetch_details(auth.0.token().to_string()).await
         }
-    ))
-                            .route("/ping", get(|| async { "pong" }));
+        ))
+        .route("/ping", get(|| async { "pong" }));
     let listener = TcpListener::bind(addr).await.unwrap();
 
     println!("Listening on {}", addr);
@@ -47,23 +47,14 @@ async fn validate_api_key(api_key: &str) -> bool{
     // println!("{}\n{}",api_key,valid_api_key);
     api_key == valid_api_key
 }
-fn get_log_path() -> String {
-    print!("Enter log file path: ");
-    io::stdout().flush().unwrap();
-    
-    let mut path = String::new();
-    io::stdin().read_line(&mut path)
-        .expect("Failed to read input");
-        
-    path.trim().to_string()
-}
+
 // Monitor log file for new lines and store them
 async fn monitor_log_file(log_data: Arc<Mutex<Vec<String>>>,log_path: String) {
-    println!("{}",log_path);
+    // println!("{}",log_path);
     let mut file = File::open(log_path).expect("Failed to open log file");
-    
+
     let mut last_position = file.metadata().unwrap().len();
-    
+
     loop {
         let new_len = file.metadata().unwrap().len();
         if new_len > last_position {
@@ -76,7 +67,7 @@ async fn monitor_log_file(log_data: Arc<Mutex<Vec<String>>>,log_path: String) {
                 }
             }
 
-            if !new_lines.is_empty() { 
+            if !new_lines.is_empty() {
                 let mut logs = log_data.lock().unwrap();
                 logs.extend(new_lines);
             }

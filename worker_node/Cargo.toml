@@ -11,4 +11,4 @@ chrono = "0.4"
 sys-info = "0.9.1"
 memchr = "2.7"  # Use the latest compatible version
 sysinfo = "^0.33.1"
-psutil = "3.2"
+axum-extra = { version = "0.10.0", features = ["typed-header"] }

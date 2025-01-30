@@ -52,7 +52,7 @@ async fn monitor_log_file(log_data: Arc<Mutex<Vec<String>>>) {
                 }
             }
 
-            if !new_lines.is_empty() {
+            if !new_lines.is_empty() { 
                 let mut logs = log_data.lock().unwrap();
                 logs.extend(new_lines);
             }

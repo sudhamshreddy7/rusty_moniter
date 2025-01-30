@@ -25,15 +25,15 @@ async fn main() {
 
     // Setup API server
     let app = Router::new()
-        .route("/logs", get(move || fetch_logs(log_data.clone())))
-        .route("/details", get(move || fetch_details()));
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8777));
+        .route("/logs", get(move |TypedHeader(auth): TypedHeader<Authorization<String>>| fetch_logs(log_data.clone(), auth)))
+        .route("/details", get(move |TypedHeader(auth): TypedHeader<Authorization<String>>| fetch_details(auth)))
+        .route("/ping", get(|| async { "pong" }));
     let listener = TcpListener::bind(addr).await.unwrap();
 
     println!("Listening on {}", addr);
     axum::serve(listener, app).await.unwrap();
 }
-async fn validateKey(api_key: &str) -> bool{
+async fn validate_api_key(api_key: &str) -> bool{
     let valid_api_key = env::var("API_KEY").unwrap_or_else(|_| "none".to_string());
     api_key == valid_api_key
 }
@@ -68,7 +68,10 @@ async fn monitor_log_file(log_data: Arc<Mutex<Vec<String>>>) {
 }
 
 // Fetch logs when API is hit
-async fn fetch_logs(log_data: Arc<Mutex<Vec<String>>>) -> Json<serde_json::Value> {
+async fn fetch_logs(log_data: Arc<Mutex<Vec<String>>>,api_key: String) -> Json<serde_json::Value> {
+    if !validate_api_key(&api_key) {
+        return Json(json!({"error": "Unauthorized"})).with_status(StatusCode::UNAUTHORIZED);
+    }
     let mut logs = log_data.lock().unwrap();
     let current_time = Local::now().to_string();
     let response = json!({ "logs": *logs ,"Time": current_time});
@@ -76,6 +79,29 @@ async fn fetch_logs(log_data: Arc<Mutex<Vec<String>>>) -> Json<serde_json::Value
     // Clear buffer after sending
     logs.clear();
 
+    Json(response)
+}
+async fn fetch_details(api_key: String) -> Json<serde_json::Value>{
+    if !validate_api_key(&api_key) {
+        return Json(json!({"error": "Unauthorized"})).with_status(StatusCode::UNAUTHORIZED);
+    }
+    let current_time = Local::now().to_string();
+    let total_memory = sys_info::mem_info().unwrap();
+    let disk = sys_info::disk_info().unwrap();
+    let os = env::consts::OS.to_string();
+    let total_memory_used =  total_memory.total / 1024 - total_memory.free / 1024;
+    let total_memory = total_memory.total / 1024;
+    let disk_used = disk.total / 1024 - disk.free / 1024;
+    let disk = disk.total;
+    // let process = fetch_processes().await;
+    let response = json!({ "Time": current_time,
+                            "OS": os,
+                            "Total memory": total_memory,
+                            "Memory used": total_memory_used,
+                            "Total disk used": disk,
+                            "Disk used": disk_used,
+                            // "Process": process,
+                        });
     Json(response)
 }
 // async fn fetch_processes() -> Json<serde_json::Value>{
@@ -122,24 +148,3 @@ async fn fetch_logs(log_data: Arc<Mutex<Vec<String>>>) -> Json<serde_json::Value
 
 //     Json(result)
 // }
-async fn fetch_details() -> Json<serde_json::Value>{
-    let current_time = Local::now().to_string();
-    let total_memory = sys_info::mem_info().unwrap();
-    let disk = sys_info::disk_info().unwrap();
-    let os = env::consts::OS.to_string();
-    let total_memory_used =  total_memory.total / 1024 - total_memory.free / 1024;
-    let total_memory = total_memory.total / 1024;
-    let disk_used = disk.total / 1024 - disk.free / 1024;
-    let disk = disk.total;
-    // let process = fetch_processes().await;
-    let response = json!({ "Time": current_time,
-                            "OS": os,
-                            "Total memory": total_memory,
-                            "Memory used": total_memory_used,
-                            "Total disk used": disk,
-                            "Disk used": disk_used,
-                            // "Process": process,
-                        });
-
-    Json(response)
-}

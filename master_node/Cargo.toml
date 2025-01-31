@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.8.1"
-serde_json = "1.0.138"
-tokio = { version = "1.43.0", features = ["full", "rt-multi-thread"] }
+
+sqlx = { version = "0.8.3", features = ["runtime-tokio-native-tls", "sqlite"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = "0.12.12"
